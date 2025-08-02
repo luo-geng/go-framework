@@ -1,0 +1,41 @@
+package handler
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"{{.ProjectName}}/internal/app/service"
+	"{{.ProjectName}}/internal/model"
+	"{{.ProjectName}}/pkg/util"
+)
+
+type {{.ModelName}}Handler struct {
+	svc service.{{.ModelName}}Service
+}
+
+func New{{.ModelName}}Handler(svc service.{{.ModelName}}Service) *{{.ModelName}}Handler {
+	return &{{.ModelName}}Handler{svc: svc}
+}
+
+// Create{{.ModelName}} godoc
+// @Summary Create a new {{.ModelName}}
+// @Description Create a new {{.ModelName}}
+// @Tags {{.ModelNamePlural}}
+// @Accept json
+// @Produce json
+// @Param {{.ModelNameLower}} body model.{{.ModelName}} true "Create {{.ModelName}}"
+// @Success 201 {object} util.Response
+// @Failure 400 {object} util.Response
+// @Router /api/v1/{{.ModelNamePluralLower}} [post]
+func (h *{{.ModelName}}Handler) Create{{.ModelName}}(c *gin.Context) {
+	var req model.{{.ModelName}}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	// ... call service
+	util.SuccessResponse(c, http.StatusCreated, "Created successfully", nil)
+}
+
+// ... other CRUD methods
