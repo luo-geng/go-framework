@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/luoooo/gis/geopackage"
+	"github.com/luo-geng/go-framework/gis/geopackage"
 	"github.com/twpayne/go-geom"
 )
 
