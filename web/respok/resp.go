@@ -1,4 +1,8 @@
-package resp
+// Package respok 布尔风格统一响应结构（Ok bool 标识成功/失败）。
+//
+// 与 web/resp（HTTP 状态码风格，Code int 可区分 401/403/500 等场景）互为替代：
+// 前端只需要两态结果时用本包，需要细分错误码时用 web/resp。
+package respok
 
 type Resp[T any] struct {
 	Ok   bool   `json:"ok"`

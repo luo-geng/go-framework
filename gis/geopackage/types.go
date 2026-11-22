@@ -50,7 +50,7 @@ type Table struct {
 type Feature struct {
 	ID         int64
 	Geometry   geom.T
-	Attributes map[string]interface{}
+	Attributes map[string]any
 }
 
 // Writer GeoPackage 写入器

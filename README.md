@@ -1,55 +1,77 @@
-# Go Framework 项目
+# Go Framework Project
 
-这是一个基于 Go 语言的轻量级开发框架，适用于快速构建高效、可维护的应用程序。该项目分为多个模块，包括核心功能、代码生成工具以及 Web 开发相关组件。
+[English](README.md) | [中文](README.zh.md)
 
----
-
-## 主要功能
-
-- **日志系统**：使用 `zap` 提供高性能日志记录功能，并封装了常用的日志输出方法。
-- **响应封装**：提供统一的响应结构，支持成功与失败的返回格式。
-- **分页支持**：为 Web 应用提供分页数据结构和响应封装。
-- **代码生成**：包含代码生成工具，可自动生成处理逻辑模板。
+This is a lightweight development framework based on the Go language, suitable for rapidly building efficient and maintainable applications. The project is divided into multiple modules, including core functionalities, code generation tools, and components related to web development.
 
 ---
 
-## 模块说明
+## Key Features
 
-- **core**：核心库，包含日志模块 `logger`。
-- **gen**：代码生成模块，包含模板引擎和生成逻辑。
-- **web**：Web 开发支持模块，包含分页结构和统一响应格式。
+- **Logging System**: Built on the standard library `log/slog`, with stdlib text output and lumberjack file rotation; use `slog.Info/Debug/...` directly after initialization. Includes a gin request logging middleware.
+- **Response Wrapping**: Provides a unified response structure, supporting formats for both success and failure returns.
+- **Pagination Support**: Offers data structures and response encapsulation for pagination in web applications.
+- **Code Generation**: Includes a code generation tool that can automatically generate processing logic templates.
 
 ---
 
-## 安装与使用
+## Module Description
 
-### 初始化日志模块
+- **core**: Core library, containing the logging module `slogx`.
+- **gen**: Code generation module, including the template engine and generation logic.
+- **web**: Web development support module, containing pagination structures, unified response formats, and gin middleware.
+
+---
+
+## Installation and Usage
+
+### Initialize the Logging Module
 
 ```go
-import "core/logger"
+import (
+    "log/slog"
+
+    "gitee.com/luogeng_cn/go-framework/core/slogx"
+)
 
 func main() {
-    if err := logger.Init(); err != nil {
-        panic(err)
-    }
+    // level <= slog.LevelDebug: terminal output only (debug mode);
+    // otherwise: terminal + log file (default ./logs/app.log, overridable via the second argument)
+    slogx.InitDefault(slog.LevelInfo)
 
-    logger.Infof("服务启动成功")
+    slog.Info("Service started successfully")
 }
 ```
 
-### 使用统一响应结构
+### Gin Request Logging Middleware
+
+```go
+import (
+    "github.com/gin-gonic/gin"
+
+    "gitee.com/luogeng_cn/go-framework/web/gin/middleware"
+)
+
+func newEngine() *gin.Engine {
+    r := gin.New()
+    r.Use(middleware.Logger(), middleware.Recovery())
+    return r
+}
+```
+
+### Using the Unified Response Structure
 
 ```go
 import "web/resp"
 
 func exampleHandler() {
-    resp := resp.Success("操作成功")
-    // 或者返回错误信息
-    // resp := resp.Fail(500, "发生错误")
+    resp := resp.Success("Operation succeeded")
+    // Or return an error message
+    // resp := resp.Fail(500, "An error occurred")
 }
 ```
 
-### 分页功能
+### Pagination Functionality
 
 ```go
 import "web"
@@ -60,7 +82,7 @@ func paginationExample() {
         Limit: 10,
     }
 
-    // 使用 PageResp 返回分页数据
+    // Use PageResp to return paginated data
     pageResp := &web.PageResp[string]{
         List:     []string{"item1", "item2"},
         Page:     1,
@@ -72,18 +94,18 @@ func paginationExample() {
 
 ---
 
-## 贡献指南
+## Contribution Guide
 
-欢迎贡献代码和改进文档。请遵循以下步骤：
+Contributions to code and documentation improvements are welcome. Please follow these steps:
 
-1. Fork 本仓库
-2. 创建新分支 (`git checkout -b feature/new-feature`)
-3. 提交更改 (`git commit -am 'Add new feature'`)
-4. 推送分支 (`git push origin feature/new-feature`)
-5. 创建 Pull Request
+1. Fork this repository
+2. Create a new branch (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -am 'Add new feature'`)
+4. Push the branch (`git push origin feature/new-feature`)
+5. Create a Pull Request
 
 ---
 
-## 许可证
+## License
 
-本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+This project uses the MIT License. See the [LICENSE](LICENSE) file for details.

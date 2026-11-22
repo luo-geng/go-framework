@@ -2,10 +2,12 @@ package geopackage
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"math"
 
 	"github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom/encoding/wkb"
 	_ "modernc.org/sqlite"
 )
 
@@ -165,21 +167,21 @@ func (w *Writer) CreateTable(table Table) error {
 	return nil
 }
 
-// InsertFeatures 批量插入要素
+// InsertFeatures 批量插入要素，几何按实际类型编码为 GPKG 二进制（WKB + 标准头）
 func (w *Writer) InsertFeatures(tableName string, geomCol string, features []Feature) error {
 	if len(features) == 0 {
 		return nil
 	}
 
-	// 构建插入 SQL
-	firstFeat := features[0]
+	// 获取属性列名（以第一条要素为准，调用方保证属性集一致）
+	attrNames := make([]string, 0, len(features[0].Attributes))
+	for k := range features[0].Attributes {
+		attrNames = append(attrNames, k)
+	}
+
 	colNames := "fid, " + geomCol
 	placeholders := "?, ?"
-
-	// 获取属性列名
-	attrNames := make([]string, 0, len(firstFeat.Attributes))
-	for k := range firstFeat.Attributes {
-		attrNames = append(attrNames, k)
+	for _, k := range attrNames {
 		colNames += ", " + k
 		placeholders += ", ?"
 	}
@@ -197,52 +199,18 @@ func (w *Writer) InsertFeatures(tableName string, geomCol string, features []Fea
 	defer stmt.Close()
 
 	for _, feat := range features {
-		// 编码 WKB
-		poly := feat.Geometry.(*geom.Polygon)
-		wkbBytes := marshalPolygonZ(poly)
-
-		// 计算包围盒
-		coords := poly.Coords()[0] // 外环
-		minX, maxX := coords[0][0], coords[0][0]
-		minY, maxY := coords[0][1], coords[0][1]
-		for _, pt := range coords {
-			if pt[0] < minX {
-				minX = pt[0]
-			}
-			if pt[0] > maxX {
-				maxX = pt[0]
-			}
-			if pt[1] < minY {
-				minY = pt[1]
-			}
-			if pt[1] > maxY {
-				maxY = pt[1]
-			}
+		gpkgGeom, err := encodeGpkgGeometry(feat.Geometry, 4326)
+		if err != nil {
+			return fmt.Errorf("encode geometry (fid=%d) failed: %w", feat.ID, err)
 		}
 
-		// GeoPackage 标准几何头：
-		// magic (0x4750) + version (0x00) + flags + srs_id (4326) + envelope
-		// flags: 0x23 = 00100011 (little endian + 2D envelope + has Z)
-		gpkgHeader := make([]byte, 0, 40)
-		gpkgHeader = append(gpkgHeader, 0x47, 0x50)                // magic
-		gpkgHeader = append(gpkgHeader, 0x00)                        // version
-		gpkgHeader = append(gpkgHeader, 0x23)                        // flags
-		gpkgHeader = putUint32(gpkgHeader, 4326)                     // srs_id
-		gpkgHeader = putFloat64(gpkgHeader, minX)                    // min_x
-		gpkgHeader = putFloat64(gpkgHeader, maxX)                    // max_x
-		gpkgHeader = putFloat64(gpkgHeader, minY)                    // min_y
-		gpkgHeader = putFloat64(gpkgHeader, maxY)                    // max_y
-
-		gpkgGeom := append(gpkgHeader, wkbBytes...)
-
-		// 构建参数
-		args := []interface{}{feat.ID, gpkgGeom}
+		args := make([]any, 0, 2+len(attrNames))
+		args = append(args, feat.ID, gpkgGeom)
 		for _, k := range attrNames {
 			args = append(args, feat.Attributes[k])
 		}
 
-		_, err = stmt.Exec(args...)
-		if err != nil {
+		if _, err := stmt.Exec(args...); err != nil {
 			return fmt.Errorf("insert feature %d failed: %w", feat.ID, err)
 		}
 	}
@@ -250,67 +218,42 @@ func (w *Writer) InsertFeatures(tableName string, geomCol string, features []Fea
 	return tx.Commit()
 }
 
+// encodeGpkgGeometry 将 go-geom 几何编码为 GeoPackage 标准二进制：
+// magic(0x4750) + version(0x00) + flags + srs_id + envelope + WKB
+// flags: bit0=小端；bit1-3=envelope 类型（1=XY，2=XYZ）
+func encodeGpkgGeometry(g geom.T, srsID int) ([]byte, error) {
+	wkbBytes, err := wkb.Marshal(g, binary.LittleEndian)
+	if err != nil {
+		return nil, err
+	}
+
+	hasZ := g.Layout().ZIndex() != -1
+	envIndicator := uint8(1) // XY envelope
+	if hasZ {
+		envIndicator = 2 // XYZ envelope
+	}
+	flags := byte(0x01) | byte(envIndicator<<1)
+
+	// envelope 内容按维度取几何包围盒；空几何时写 0
+	bounds := g.Bounds()
+	envVals := []float64{bounds.Min(0), bounds.Max(0), bounds.Min(1), bounds.Max(1)}
+	if hasZ {
+		envVals = append(envVals, bounds.Min(2), bounds.Max(2))
+	}
+
+	header := make([]byte, 0, 8+len(envVals)*8)
+	header = append(header, 0x47, 0x50, 0x00, flags)
+	header = binary.LittleEndian.AppendUint32(header, uint32(srsID))
+	for _, v := range envVals {
+		header = binary.LittleEndian.AppendUint64(header, math.Float64bits(v))
+	}
+
+	return append(header, wkbBytes...), nil
+}
+
 // Close 关闭数据库
 func (w *Writer) Close() error {
 	return w.db.Close()
-}
-
-// marshalPolygonZ 将 Polygon 编码为 WKB PolygonZ 格式
-func marshalPolygonZ(poly *geom.Polygon) []byte {
-	coords := poly.Coords()
-	if len(coords) == 0 {
-		return nil
-	}
-
-	buf := make([]byte, 0, 2048)
-
-	// WKB 头：byte order (1 = little endian)
-	buf = append(buf, 1)
-
-	// WKB 类型：PolygonZ = 1003 (OGC SFS 1.2 标准)
-	buf = putUint32(buf, 1003)
-
-	// 环数量
-	buf = putUint32(buf, uint32(len(coords)))
-
-	// 每个环
-	for _, ring := range coords {
-		// 点数量
-		buf = putUint32(buf, uint32(len(ring)))
-		// 每个点的坐标 (x, y, z) - WKB 要求使用 float64 (8字节)
-		for _, pt := range ring {
-			buf = putFloat64(buf, pt[0])
-			buf = putFloat64(buf, pt[1])
-			buf = putFloat64(buf, pt[2])
-		}
-	}
-
-	return buf
-}
-
-// putFloat64 以小端序写入 float64 (WKB 规范要求 8 字节)
-func putFloat64(b []byte, v float64) []byte {
-	bits := math.Float64bits(v)
-	return append(b,
-		byte(bits),
-		byte(bits>>8),
-		byte(bits>>16),
-		byte(bits>>24),
-		byte(bits>>32),
-		byte(bits>>40),
-		byte(bits>>48),
-		byte(bits>>56),
-	)
-}
-
-// putUint32 以小端序写入 uint32
-func putUint32(b []byte, v uint32) []byte {
-	return append(b,
-		byte(v),
-		byte(v>>8),
-		byte(v>>16),
-		byte(v>>24),
-	)
 }
 
 // hasZ 判断几何类型是否包含 Z 值

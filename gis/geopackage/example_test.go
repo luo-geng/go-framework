@@ -13,6 +13,8 @@ func TestWriter_PolygonZ(t *testing.T) {
 	tmpFile := "/tmp/test_polygonz.gpkg"
 	defer os.Remove(tmpFile)
 
+	srsID := 4326
+
 	// 创建写入器
 	w, err := geopackage.NewWriter(tmpFile)
 	if err != nil {
@@ -25,7 +27,7 @@ func TestWriter_PolygonZ(t *testing.T) {
 		Name:           "flood_triangles",
 		GeometryColumn: "geom",
 		GeometryType:   geopackage.GeomPolygonZ,
-		SRSID:          new(4326),
+		SRSID:          &srsID,
 		AttributeColumns: []geopackage.Column{
 			{Name: "tri_id", Type: "INTEGER"},
 			{Name: "water_level", Type: "REAL"},
@@ -47,7 +49,7 @@ func TestWriter_PolygonZ(t *testing.T) {
 				116.1, 39.1, 100.8, // 点3
 				116.0, 39.0, 100.5, // 闭合
 			}, []int{4}),
-			Attributes: map[string]interface{}{
+			Attributes: map[string]any{
 				"tri_id":      0,
 				"water_level": 100.8,
 				"water_depth": 2.5,
