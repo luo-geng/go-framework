@@ -1,4 +1,4 @@
-module gitee.com/luogeng_cn/go-framework/web
+module github.com/luo-geng/go-framework/web
 
 go 1.27
 

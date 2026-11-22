@@ -1,4 +1,4 @@
-module gitee.com/luogeng_cn/go-framework/core
+module github.com/luo-geng/go-framework/core
 
 go 1.27
 

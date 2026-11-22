@@ -1,3 +1,3 @@
-module gitee.com/luogeng_cn/go-framework/gen
+module github.com/luo-geng/go-framework/gen
 
 go 1.27

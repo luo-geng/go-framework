@@ -31,7 +31,7 @@ This is a lightweight development framework based on the Go language, suitable f
 import (
     "log/slog"
 
-    "gitee.com/luogeng_cn/go-framework/core/slogx"
+    "github.com/luo-geng/go-framework/core/slogx"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 import (
     "github.com/gin-gonic/gin"
 
-    "gitee.com/luogeng_cn/go-framework/web/gin/middleware"
+    "github.com/luo-geng/go-framework/web/gin/middleware"
 )
 
 func newEngine() *gin.Engine {
