@@ -1,4 +1,4 @@
-package geopackage
+package gpkg
 
 import (
 	"database/sql"

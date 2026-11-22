@@ -1,11 +1,11 @@
-package geopackage_test
+package gpkg_test
 
 import (
 	"fmt"
 	"os"
 	"testing"
 
-	"github.com/luo-geng/go-framework/gis/geopackage"
+	gpkg "github.com/luo-geng/go-framework/gis/gpkg"
 	"github.com/twpayne/go-geom"
 )
 
@@ -16,19 +16,19 @@ func TestWriter_PolygonZ(t *testing.T) {
 	srsID := 4326
 
 	// 创建写入器
-	w, err := geopackage.NewWriter(tmpFile)
+	w, err := gpkg.NewWriter(tmpFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer w.Close()
 
 	// 定义表结构
-	table := geopackage.Table{
+	table := gpkg.Table{
 		Name:           "flood_triangles",
 		GeometryColumn: "geom",
-		GeometryType:   geopackage.GeomPolygonZ,
+		GeometryType:   gpkg.GeomPolygonZ,
 		SRSID:          &srsID,
-		AttributeColumns: []geopackage.Column{
+		AttributeColumns: []gpkg.Column{
 			{Name: "tri_id", Type: "INTEGER"},
 			{Name: "water_level", Type: "REAL"},
 			{Name: "water_depth", Type: "REAL"},
@@ -40,7 +40,7 @@ func TestWriter_PolygonZ(t *testing.T) {
 	}
 
 	// 插入一个 PolygonZ 三角形
-	features := []geopackage.Feature{
+	features := []gpkg.Feature{
 		{
 			ID: 1,
 			Geometry: geom.NewPolygonFlat(geom.XYZ, []float64{

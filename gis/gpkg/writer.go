@@ -1,4 +1,4 @@
-package geopackage
+package gpkg
 
 import (
 	"database/sql"
@@ -27,10 +27,20 @@ func NewWriter(dbPath string) (*Writer, error) {
 	return w, nil
 }
 
-// initMetadata 初始化 GeoPackage 元数据表（OGC 标准）
+// initMetadata 初始化 GeoPackage 元数据表（OGC 标准），
+// 并写入文件标识 PRAGMA（application_id="GPKG"，user_version=10201 即 1.2.1），
+// 使生成文件可被识别为 GeoPackage（参照 go-spatial/geom encoding/gpkg 的 initialSQL）
 func (w *Writer) initMetadata() error {
-	// gpkg_spatial_ref_sys - 空间参考系统表
 	_, err := w.db.Exec(`
+		PRAGMA application_id = 1196444487;  -- "GPKG" 小端四字节的十进制
+		PRAGMA user_version = 10201;          -- GeoPackage 1.2.1
+	`)
+	if err != nil {
+		return fmt.Errorf("设置 gpkg 文件标识失败: %w", err)
+	}
+
+	// gpkg_spatial_ref_sys - 空间参考系统表
+	_, err = w.db.Exec(`
 	CREATE TABLE IF NOT EXISTS gpkg_spatial_ref_sys (
 		srs_name TEXT NOT NULL,
 		srs_id INTEGER NOT NULL PRIMARY KEY,
@@ -215,7 +225,43 @@ func (w *Writer) InsertFeatures(tableName string, geomCol string, features []Fea
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// 维护 gpkg_contents 中该表的 extent（取已插入几何的联合包围盒，增量扩大）
+	return w.updateContentsExtent(tableName, features)
+}
+
+// updateContentsExtent 将本批要素的联合包围盒并入 gpkg_contents 的 min/max 字段
+func (w *Writer) updateContentsExtent(tableName string, features []Feature) error {
+	var minX, minY = math.MaxFloat64, math.MaxFloat64
+	var maxX, maxY = -math.MaxFloat64, -math.MaxFloat64
+	found := false
+
+	for _, feat := range features {
+		b := feat.Geometry.Bounds()
+		if b.IsEmpty() {
+			continue
+		}
+		found = true
+		minX, minY = math.Min(minX, b.Min(0)), math.Min(minY, b.Min(1))
+		maxX, maxY = math.Max(maxX, b.Max(0)), math.Max(maxY, b.Max(1))
+	}
+	if !found {
+		return nil
+	}
+
+	// NULL 字段取本批值；已有值取并集（与 go-spatial UpdateGeometryExtent 语义一致）
+	_, err := w.db.Exec(`
+		UPDATE gpkg_contents SET
+			min_x = MIN(COALESCE(min_x, ?), ?),
+			min_y = MIN(COALESCE(min_y, ?), ?),
+			max_x = MAX(COALESCE(max_x, ?), ?),
+			max_y = MAX(COALESCE(max_y, ?), ?)
+		WHERE table_name = ?`,
+		minX, minX, minY, minY, maxX, maxX, maxY, maxY, tableName)
+	return err
 }
 
 // encodeGpkgGeometry 将 go-geom 几何编码为 GeoPackage 标准二进制：
