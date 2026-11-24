@@ -1,0 +1,72 @@
+// Package httpx 带指数退避重试的 HTTP 下载，429/5xx 与网络错误自动重试。
+package httpx
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"math/rand/v2"
+	"net/http"
+	"time"
+)
+
+// StatusError 携带 HTTP 状态码的错误
+type StatusError struct{ Status int }
+
+func (e *StatusError) Error() string { return fmt.Sprintf("HTTP %d", e.Status) }
+
+// Get 下载 url 全部响应体。
+// retries 为最大重试次数（0 = 单次尝试）；429/5xx 与网络错误按指数退避重试，
+// 其余错误（3xx/4xx）立即失败。返回的 StatusError 可用 errors.As 取状态码。
+func Get(ctx context.Context, client *http.Client, url string, retries int) ([]byte, error) {
+	var lastErr error
+	for attempt := range retries + 1 {
+		if attempt > 0 {
+			// 指数退避 + 随机抖动，避免重试风暴
+			backoff := time.Duration(1<<uint(attempt-1))*2*time.Second + time.Duration(rand.IntN(1000))*time.Millisecond
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+
+		body, err := do(ctx, client, url)
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+		if !retryable(err) {
+			break
+		}
+	}
+	return nil, fmt.Errorf("下载失败 %s: %w", url, lastErr)
+}
+
+// do 单次请求
+func do(ctx context.Context, client *http.Client, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, &StatusError{Status: resp.StatusCode}
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// retryable 429 与 5xx 可重试；4xx 其他错误不可重试；网络错误默认可重试
+func retryable(err error) bool {
+	var se *StatusError
+	if errors.As(err, &se) {
+		return se.Status == http.StatusTooManyRequests || se.Status >= 500
+	}
+	return true
+}
