@@ -161,3 +161,34 @@ func TestGet_ContextCancel(t *testing.T) {
 		t.Fatal("取消后未及时退出")
 	}
 }
+
+// TestDo_NonReplayableBodyNoRetry 幂等方法的请求体无法重放（GetBody 缺失）时不重试，避免静默截断
+func TestDo_NonReplayableBodyNoRetry(t *testing.T) {
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != "payload" {
+			t.Errorf("请求体被截断: %q", body)
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	// io.MultiReader 非标准类型，NewRequest 不设置 GetBody
+	req, err := http.NewRequest(http.MethodPut, srv.URL, io.MultiReader(strings.NewReader("payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.GetBody != nil {
+		t.Fatal("前置条件失败：GetBody 应缺失")
+	}
+	_, err = Do(context.Background(), srv.Client(), req, 3)
+	var se *StatusError
+	if !errors.As(err, &se) || se.Status != 503 {
+		t.Fatalf("应返回 StatusError 503: %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("不可重放的请求体不应重试，实际请求 %d 次", calls.Load())
+	}
+}

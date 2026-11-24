@@ -48,12 +48,17 @@ func Do(ctx context.Context, client *http.Client, req *http.Request, retries int
 			return body, nil
 		}
 		lastErr = err
-		// 非幂等方法不重试；其余错误按 retryable 判定
-		if !idempotent(req.Method) || !retryable(err) {
+		// 非幂等方法不重试；请求体无法重放时不重试（避免重试发送空 body 造成静默截断）；其余按 retryable 判定
+		if !idempotent(req.Method) || !canReplay(req) || !retryable(err) {
 			break
 		}
 	}
 	return nil, fmt.Errorf("下载失败 %s: %w", req.URL, lastErr)
+}
+
+// canReplay 请求体可重放：无 body，或 GetBody 可重建 body
+func canReplay(req *http.Request) bool {
+	return req.Body == nil || req.GetBody != nil
 }
 
 // idempotent 可安全自动重试的 HTTP 方法
