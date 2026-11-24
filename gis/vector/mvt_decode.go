@@ -158,13 +158,10 @@ func orbToGeom(g orb.Geometry) (geom.T, bool) {
 		var endss [][]int
 		for _, p := range v {
 			var ends []int
-			base := len(flats)
 			for _, ring := range p {
 				flats = append(flats, toFlat(ring)...)
+				// flats 为全局累加器，len 即绝对结束索引
 				ends = append(ends, len(flats))
-			}
-			for i := range ends {
-				ends[i] += base
 			}
 			endss = append(endss, ends)
 		}
