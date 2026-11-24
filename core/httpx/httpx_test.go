@@ -53,6 +53,37 @@ func TestGet_4xxNoRetry(t *testing.T) {
 	}
 }
 
+// TestDo_CustomHeaders Do 应发送调用方构造的请求（含自定义请求头），并照常重试
+func TestDo_CustomHeaders(t *testing.T) {
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("Referer") != "https://map.qq.com/" {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Referer", "https://map.qq.com/")
+
+	body, err := Do(context.Background(), srv.Client(), req, 3)
+	if err != nil {
+		t.Fatalf("应重试成功: %v", err)
+	}
+	if string(body) != "ok" {
+		t.Fatalf("内容不符: %q", body)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("头部正确时不应重试，实际请求 %d 次", calls.Load())
+	}
+}
+
 // TestGet_ContextCancel 退避等待期间取消 context
 func TestGet_ContextCancel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -20,6 +20,16 @@ func (e *StatusError) Error() string { return fmt.Sprintf("HTTP %d", e.Status) }
 // retries 为最大重试次数（0 = 单次尝试）；429/5xx 与网络错误按指数退避重试，
 // 其余错误（3xx/4xx）立即失败。返回的 StatusError 可用 errors.As 取状态码。
 func Get(ctx context.Context, client *http.Client, url string, retries int) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return Do(ctx, client, req, retries)
+}
+
+// Do 执行 req 并返回全部响应体（重试语义同 Get）。
+// 每次尝试克隆请求，req 本身不被修改，调用方构造请求时可自由设置请求头。
+func Do(ctx context.Context, client *http.Client, req *http.Request, retries int) ([]byte, error) {
 	var lastErr error
 	for attempt := range retries + 1 {
 		if attempt > 0 {
@@ -32,7 +42,7 @@ func Get(ctx context.Context, client *http.Client, url string, retries int) ([]b
 			}
 		}
 
-		body, err := do(ctx, client, url)
+		body, err := do(ctx, client, req)
 		if err == nil {
 			return body, nil
 		}
@@ -41,16 +51,12 @@ func Get(ctx context.Context, client *http.Client, url string, retries int) ([]b
 			break
 		}
 	}
-	return nil, fmt.Errorf("下载失败 %s: %w", url, lastErr)
+	return nil, fmt.Errorf("下载失败 %s: %w", req.URL, lastErr)
 }
 
-// do 单次请求
-func do(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
+// do 单次请求（克隆 req，避免重试间相互污染）
+func do(ctx context.Context, client *http.Client, req *http.Request) ([]byte, error) {
+	resp, err := client.Do(req.Clone(ctx))
 	if err != nil {
 		return nil, err
 	}
