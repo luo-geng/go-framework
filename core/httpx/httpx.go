@@ -28,7 +28,8 @@ func Get(ctx context.Context, client *http.Client, url string, retries int) ([]b
 }
 
 // Do 执行 req 并返回全部响应体（重试语义同 Get）。
-// 每次尝试克隆请求，req 本身不被修改，调用方构造请求时可自由设置请求头。
+// 每次尝试克隆请求并重放请求体，req 本身不被修改。
+// 仅幂等方法（GET/HEAD/OPTIONS/PUT/DELETE）自动重试，避免重放副作用。
 func Do(ctx context.Context, client *http.Client, req *http.Request, retries int) ([]byte, error) {
 	var lastErr error
 	for attempt := range retries + 1 {
@@ -47,16 +48,35 @@ func Do(ctx context.Context, client *http.Client, req *http.Request, retries int
 			return body, nil
 		}
 		lastErr = err
-		if !retryable(err) {
+		// 非幂等方法不重试；其余错误按 retryable 判定
+		if !idempotent(req.Method) || !retryable(err) {
 			break
 		}
 	}
 	return nil, fmt.Errorf("下载失败 %s: %w", req.URL, lastErr)
 }
 
+// idempotent 可安全自动重试的 HTTP 方法
+func idempotent(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPut, http.MethodDelete, http.MethodTrace:
+		return true
+	}
+	return false
+}
+
 // do 单次请求（克隆 req，避免重试间相互污染）
 func do(ctx context.Context, client *http.Client, req *http.Request) ([]byte, error) {
-	resp, err := client.Do(req.Clone(ctx))
+	clone := req.Clone(ctx)
+	// 重放请求体：Clone 共享同一 Body 读取器，每次尝试须重置
+	if clone.Body != nil && req.GetBody != nil {
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, err
+		}
+		clone.Body = body
+	}
+	resp, err := client.Do(clone)
 	if err != nil {
 		return nil, err
 	}

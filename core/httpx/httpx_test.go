@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"io"
 	"net/http/httptest"
 	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 )
@@ -81,6 +83,62 @@ func TestDo_CustomHeaders(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("头部正确时不应重试，实际请求 %d 次", calls.Load())
+	}
+}
+
+// TestDo_NonIdempotentNoRetry 非幂等请求（POST）只尝试一次，避免重放副作用
+func TestDo_NonIdempotentNoRetry(t *testing.T) {
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader("payload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Do(context.Background(), srv.Client(), req, 3)
+	var se *StatusError
+	if !errors.As(err, &se) || se.Status != 503 {
+		t.Fatalf("应返回 StatusError 503: %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("POST 不应重试，实际请求 %d 次", calls.Load())
+	}
+}
+
+// TestDo_RetryRewindsBody 带 body 的幂等请求重试时，每次尝试都应重放完整请求体
+func TestDo_RetryRewindsBody(t *testing.T) {
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != "payload" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodPut, srv.URL, strings.NewReader("payload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := Do(context.Background(), srv.Client(), req, 3)
+	if err != nil {
+		t.Fatalf("应重试成功: %v", err)
+	}
+	if string(resp) != "ok" {
+		t.Fatalf("内容不符: %q", resp)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("应请求 2 次，实际 %d 次", calls.Load())
 	}
 }
 
