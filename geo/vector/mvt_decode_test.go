@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/luo-geng/go-framework/gis/tilemath"
+	"github.com/luo-geng/go-framework/geo/tilemath"
 )
 
 // TestMVTDecode_RoundTrip tmvt → Layerize → EncodeTile → ParseMVTTile 往返：

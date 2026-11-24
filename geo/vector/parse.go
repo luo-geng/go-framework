@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/luo-geng/go-framework/gis/gcj02"
-	"github.com/luo-geng/go-framework/gis/tilemath"
+	"github.com/luo-geng/go-framework/geo/gcj02"
+	"github.com/luo-geng/go-framework/geo/tilemath"
 	"github.com/twpayne/go-geom"
 )
 

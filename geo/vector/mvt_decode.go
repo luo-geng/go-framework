@@ -12,8 +12,8 @@ import (
 	"github.com/paulmach/orb/maptile"
 	"github.com/twpayne/go-geom"
 
-	"github.com/luo-geng/go-framework/gis/gcj02"
-	"github.com/luo-geng/go-framework/gis/tilemath"
+	"github.com/luo-geng/go-framework/geo/gcj02"
+	"github.com/luo-geng/go-framework/geo/tilemath"
 )
 
 // ParseMVTTile 解析标准 .mvt protobuf，转换为输出要素。

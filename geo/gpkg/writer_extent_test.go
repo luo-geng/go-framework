@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	gpkg "github.com/luo-geng/go-framework/gis/gpkg"
+	gpkg "github.com/luo-geng/go-framework/geo/gpkg"
 	"github.com/twpayne/go-geom"
 )
 

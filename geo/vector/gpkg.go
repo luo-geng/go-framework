@@ -1,4 +1,4 @@
-// 将解析结果写入 GeoPackage（基于 github.com/luo-geng/go-framework/gis/gpkg）。
+// 将解析结果写入 GeoPackage（基于 github.com/luo-geng/go-framework/geo/gpkg）。
 package vector
 
 import (
@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	geopkg "github.com/luo-geng/go-framework/gis/gpkg"
+	geopkg "github.com/luo-geng/go-framework/geo/gpkg"
 	"github.com/twpayne/go-geom"
 )
 

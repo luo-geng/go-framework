@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	gpkg "github.com/luo-geng/go-framework/gis/gpkg"
+	gpkg "github.com/luo-geng/go-framework/geo/gpkg"
 )
 
 // TestWriter_GpkgFileIdentification 校验生成的文件符合 GeoPackage 规范标识：

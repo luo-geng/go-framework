@@ -1,4 +1,4 @@
-module github.com/luo-geng/go-framework/gis
+module github.com/luo-geng/go-framework/geo
 
 go 1.27
 
